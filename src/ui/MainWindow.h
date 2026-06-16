@@ -26,6 +26,7 @@ public:
         QWidget *parent = nullptr);
 
     static QString formatTime(qint64 milliseconds);
+    static QString resolveAudioPath(const QString &audioPath, const QString &appDir);
 
 private:
     void buildUi();
@@ -58,6 +59,7 @@ private:
     qint64 currentSongId_ = 0;
     int currentQueueRow_ = -1;
     bool seeking_ = false;
+    bool pendingAutoplay_ = false;
 
     QLineEdit *searchEdit_ = nullptr;
     QComboBox *sortCombo_ = nullptr;

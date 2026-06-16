@@ -62,6 +62,30 @@ QString MainWindow::formatTime(qint64 milliseconds)
         .arg(seconds, 2, 10, QLatin1Char('0'));
 }
 
+QString MainWindow::resolveAudioPath(const QString &audioPath, const QString &appDir)
+{
+    const QString trimmed = audioPath.trimmed();
+    if (QDir::isAbsolutePath(trimmed)) {
+        return QDir::cleanPath(trimmed);
+    }
+
+    QDir searchDir(appDir);
+    QString firstCandidate;
+    for (int depth = 0; depth <= 6; ++depth) {
+        const QString candidate = QDir::cleanPath(searchDir.absoluteFilePath(trimmed));
+        if (firstCandidate.isEmpty()) {
+            firstCandidate = candidate;
+        }
+        if (QFileInfo::exists(candidate)) {
+            return candidate;
+        }
+        if (!searchDir.cdUp()) {
+            break;
+        }
+    }
+    return firstCandidate;
+}
+
 void MainWindow::buildUi()
 {
     auto *central = new QWidget(this);
@@ -239,17 +263,30 @@ void MainWindow::connectUi()
     connect(positionSlider_, &QSlider::sliderReleased, this, [this] {
         seeking_ = false;
         player_->setPosition(positionSlider_->value());
+        if (player_->playbackState() != QMediaPlayer::PlayingState && currentSongId_ != 0) {
+            player_->play();
+        }
     });
     connect(volumeSlider_, &QSlider::valueChanged, this, [this](int value) {
         audioOutput_->setVolume(value / 100.0f);
     });
     connect(player_, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
         if (status == QMediaPlayer::EndOfMedia) {
+            pendingAutoplay_ = false;
             playRelative(1);
+        } else if (pendingAutoplay_
+                   && (status == QMediaPlayer::LoadedMedia
+                       || status == QMediaPlayer::BufferedMedia)) {
+            pendingAutoplay_ = false;
+            player_->setPosition(0);
+            player_->play();
+        } else if (status == QMediaPlayer::InvalidMedia) {
+            pendingAutoplay_ = false;
         }
     });
     connect(player_, &QMediaPlayer::errorOccurred, this,
             [this](QMediaPlayer::Error, const QString &message) {
+                pendingAutoplay_ = false;
                 statusBar()->showMessage(text(u8"播放错误：") + message, 8000);
             });
 }
@@ -406,6 +443,7 @@ void MainWindow::deleteSong()
     }
     if (currentSongId_ == id) {
         player_->stop();
+        pendingAutoplay_ = false;
         currentSongId_ = 0;
         currentQueueRow_ = -1;
         currentSongLabel_->setText(text(u8"当前未播放"));
@@ -506,7 +544,10 @@ void MainWindow::playRow(int row)
     currentSongId_ = song.id;
     currentQueueRow_ = row;
     currentSongLabel_->setText(song.title + QStringLiteral(" - ") + song.performerText());
+    pendingAutoplay_ = true;
+    player_->stop();
     player_->setSource(QUrl::fromLocalFile(path));
+    player_->setPosition(0);
     if (!database_.incrementPlay(song.id)) {
         showDatabaseError(text(u8"播放计数更新失败"));
     }
@@ -537,9 +578,7 @@ void MainWindow::playRelative(int offset)
 
 QString MainWindow::audioFilePath(const Song &song) const
 {
-    return QDir::isAbsolutePath(song.audioPath)
-        ? QDir::cleanPath(song.audioPath)
-        : QDir(appDir_).absoluteFilePath(song.audioPath);
+    return resolveAudioPath(song.audioPath, appDir_);
 }
 
 void MainWindow::updatePlayerUi()
