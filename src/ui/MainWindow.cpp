@@ -58,6 +58,7 @@ MainWindow::MainWindow(
     buildUi();
     connectUi();
     loadPlaylists();
+    loadGenres();
     refresh();
 }
 
@@ -165,6 +166,10 @@ void MainWindow::buildUi()
     directionCombo_->addItem(text(u8"降序"), static_cast<int>(SortDirection::Descending));
     directionCombo_->addItem(text(u8"升序"), static_cast<int>(SortDirection::Ascending));
 
+    genreCombo_ = new QComboBox(central);
+    genreCombo_->setObjectName(QStringLiteral("genreFilter"));
+    genreCombo_->setMinimumWidth(120);
+
     playlistCombo_ = new QComboBox(central);
     playlistCombo_->setMinimumWidth(140);
     auto *newPlaylistButton = new QPushButton(text(u8"新建歌单"), central);
@@ -176,6 +181,7 @@ void MainWindow::buildUi()
     toolbar->addWidget(searchEdit_, 1);
     toolbar->addWidget(sortCombo_);
     toolbar->addWidget(directionCombo_);
+    toolbar->addWidget(genreCombo_);
     toolbar->addWidget(playlistCombo_);
     toolbar->addWidget(newPlaylistButton);
     toolbar->addWidget(refreshButton);
@@ -307,6 +313,7 @@ void MainWindow::connectUi()
     connect(searchEdit_, &QLineEdit::textChanged, this, [this] { refresh(); });
     connect(sortCombo_, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
     connect(directionCombo_, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
+    connect(genreCombo_, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
     connect(playlistCombo_, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
     connect(table_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         playRow(row);
@@ -389,6 +396,20 @@ void MainWindow::loadPlaylists(qint64 selectedId)
     playlistCombo_->blockSignals(false);
 }
 
+void MainWindow::loadGenres(const QString &selectedGenre)
+{
+    const QString keepGenre = selectedGenre.isEmpty() ? this->selectedGenre() : selectedGenre;
+    genreCombo_->blockSignals(true);
+    genreCombo_->clear();
+    genreCombo_->addItem(text(u8"全部分类"), QString());
+    for (const QString &genre : database_.genres()) {
+        genreCombo_->addItem(genre, genre);
+    }
+    const int selectedIndex = genreCombo_->findData(keepGenre);
+    genreCombo_->setCurrentIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    genreCombo_->blockSignals(false);
+}
+
 void MainWindow::refresh(qint64 selectedId)
 {
     if (selectedId == 0) {
@@ -400,7 +421,7 @@ void MainWindow::refresh(qint64 selectedId)
         playlistId = playlistCombo_->currentData().toLongLong();
     }
     songs_ = database_.listSongs(
-        searchEdit_->text().trimmed(), selectedSort(), selectedDirection(), playlistId);
+        searchEdit_->text().trimmed(), selectedSort(), selectedDirection(), playlistId, selectedGenre());
     fillTable();
     const int selectedRow = rowForSong(selectedId);
     if (selectedRow >= 0) {
@@ -466,6 +487,11 @@ SortDirection MainWindow::selectedDirection() const
     return static_cast<SortDirection>(directionCombo_->currentData().toInt());
 }
 
+QString MainWindow::selectedGenre() const
+{
+    return genreCombo_->currentData().toString();
+}
+
 void MainWindow::addSong()
 {
     SongDialog dialog(appDir_, this);
@@ -478,6 +504,7 @@ void MainWindow::addSong()
         showDatabaseError(text(u8"新增失败"));
         return;
     }
+    loadGenres(dialog.song().genre);
     refresh(id);
 }
 
@@ -499,6 +526,7 @@ void MainWindow::editSong()
         showDatabaseError(text(u8"编辑失败"));
         return;
     }
+    loadGenres(dialog.song().genre);
     refresh(id);
 }
 
@@ -527,6 +555,7 @@ void MainWindow::deleteSong()
         currentQueueRow_ = -1;
         currentSongLabel_->setText(text(u8"当前未播放"));
     }
+    loadGenres();
     refresh();
 }
 

@@ -39,12 +39,14 @@ private:
     void buildUi();
     void connectUi();
     void loadPlaylists(qint64 selectedId = 0);
+    void loadGenres(const QString &selectedGenre = {});
     void refresh(qint64 selectedSongId = 0);
     void fillTable();
     qint64 selectedSongId() const;
     int rowForSong(qint64 songId) const;
     SongSort selectedSort() const;
     SortDirection selectedDirection() const;
+    QString selectedGenre() const;
     void addSong();
     void editSong();
     void deleteSong();
@@ -75,6 +77,7 @@ private:
     QLineEdit *searchEdit_ = nullptr;
     QComboBox *sortCombo_ = nullptr;
     QComboBox *directionCombo_ = nullptr;
+    QComboBox *genreCombo_ = nullptr;
     QComboBox *playlistCombo_ = nullptr;
     QTableWidget *table_ = nullptr;
     QPushButton *likeButton_ = nullptr;

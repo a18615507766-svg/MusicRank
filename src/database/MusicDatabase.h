@@ -5,6 +5,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 
@@ -31,7 +32,9 @@ public:
         const QString &search = {},
         SongSort sort = SongSort::Heat,
         SortDirection direction = SortDirection::Descending,
-        std::optional<qint64> playlistId = std::nullopt);
+        std::optional<qint64> playlistId = std::nullopt,
+        const QString &genre = {});
+    QStringList genres();
 
     bool toggleLike(qint64 songId);
     bool toggleDislike(qint64 songId);

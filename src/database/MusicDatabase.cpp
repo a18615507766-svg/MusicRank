@@ -448,7 +448,8 @@ QList<Song> MusicDatabase::listSongs(
     const QString &search,
     SongSort sort,
     SortDirection direction,
-    std::optional<qint64> playlistId)
+    std::optional<qint64> playlistId,
+    const QString &genre)
 {
     m_lastError.clear();
     QList<Song> songs;
@@ -460,6 +461,7 @@ QList<Song> MusicDatabase::listSongs(
     sql += QStringLiteral(
         "WHERE (:search = '' OR s.title LIKE :term OR s.performers LIKE :term "
         "OR s.lyricist LIKE :term OR s.composer LIKE :term OR s.album LIKE :term) ");
+    sql += QStringLiteral("AND (:genre = '' OR s.genre=:genre) ");
     if (filterPlaylist) {
         sql += QStringLiteral("AND ps.playlist_id=:playlist_id ");
     }
@@ -471,8 +473,12 @@ QList<Song> MusicDatabase::listSongs(
 
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     query.prepare(sql);
+    const QString genreFilter = genre.trimmed();
     query.bindValue(QStringLiteral(":search"), search);
     query.bindValue(QStringLiteral(":term"), QStringLiteral("%") + search + QStringLiteral("%"));
+    query.bindValue(
+        QStringLiteral(":genre"),
+        genreFilter.isNull() ? QStringLiteral("") : genreFilter);
     if (filterPlaylist) {
         query.bindValue(QStringLiteral(":playlist_id"), *playlistId);
     }
@@ -484,6 +490,24 @@ QList<Song> MusicDatabase::listSongs(
         songs.append(readSong(query));
     }
     return songs;
+}
+
+QStringList MusicDatabase::genres()
+{
+    m_lastError.clear();
+    QStringList result;
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    if (!query.exec(QStringLiteral(
+            "SELECT DISTINCT genre FROM songs "
+            "WHERE TRIM(genre) <> '' "
+            "ORDER BY genre COLLATE NOCASE ASC"))) {
+        setLastError(query.lastError().text());
+        return result;
+    }
+    while (query.next()) {
+        result.append(query.value(0).toString());
+    }
+    return result;
 }
 
 bool MusicDatabase::toggleLike(qint64 songId)

@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QComboBox>
 #include <QLineEdit>
 #include <QMediaPlayer>
 #include <QPushButton>
@@ -32,6 +33,7 @@ void TestMainWindow::createsRequiredControls()
     MainWindow window(database, QCoreApplication::applicationDirPath());
 
     QVERIFY(window.findChild<QLineEdit *>(QStringLiteral("globalSearch")));
+    QVERIFY(window.findChild<QComboBox *>(QStringLiteral("genreFilter")));
     QVERIFY(window.findChild<QTableWidget *>(QStringLiteral("rankingTable")));
     QVERIFY(window.findChild<QPushButton *>(QStringLiteral("likeButton")));
     QVERIFY(window.findChild<QPushButton *>(QStringLiteral("dislikeButton")));

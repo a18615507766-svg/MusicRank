@@ -28,6 +28,7 @@ private slots:
     void initializationIsIdempotent();
     void supportsSongCrudWithoutDeletingAudio();
     void searchesFiveMetadataFields();
+    void filtersSongsByGenre();
     void supportsEverySongSort();
     void persistsInteractionsAndSortsByHeat();
     void likeAndDislikeAreExclusiveAndCancelable();
@@ -116,6 +117,37 @@ void TestMusicDatabase::searchesFiveMetadataFields()
         QCOMPARE(results.first().id, id);
     }
     QVERIFY(database.listSongs(QStringLiteral("missing")).isEmpty());
+}
+
+void TestMusicDatabase::filtersSongsByGenre()
+{
+    MusicDatabase database(QStringLiteral(":memory:"));
+    QVERIFY(database.open());
+    QVERIFY(database.initialize());
+
+    Song pop = makeSong(QStringLiteral("Pop Song"), QStringLiteral("Mira"), QStringLiteral("pop.mp3"));
+    pop.genre = QStringLiteral("Pop");
+    QVERIFY(database.addSong(pop) > 0);
+
+    Song rock = makeSong(QStringLiteral("Rock Song"), QStringLiteral("Mira"), QStringLiteral("rock.mp3"));
+    rock.genre = QStringLiteral("Rock");
+    QVERIFY(database.addSong(rock) > 0);
+
+    QCOMPARE(database.genres(), QStringList({QStringLiteral("Pop"), QStringLiteral("Rock")}));
+
+    const QList<Song> popSongs = database.listSongs(
+        {}, SongSort::Title, SortDirection::Ascending, std::nullopt, QStringLiteral("Pop"));
+    QCOMPARE(popSongs.size(), 1);
+    QCOMPARE(popSongs.first().title, QStringLiteral("Pop Song"));
+
+    const QList<Song> searchedRock = database.listSongs(
+        QStringLiteral("Song"),
+        SongSort::Title,
+        SortDirection::Ascending,
+        std::nullopt,
+        QStringLiteral("Rock"));
+    QCOMPARE(searchedRock.size(), 1);
+    QCOMPARE(searchedRock.first().title, QStringLiteral("Rock Song"));
 }
 
 void TestMusicDatabase::supportsEverySongSort()
