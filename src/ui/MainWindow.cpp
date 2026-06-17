@@ -21,6 +21,7 @@
 #include <QStatusBar>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -30,9 +31,17 @@
 
 namespace
 {
+constexpr int kMaxAutoplayRetries = 8;
+constexpr int kAutoplayRetryIntervalMs = 450;
+
 QString text(const char *value)
 {
     return QString::fromUtf8(value);
+}
+
+QString styleUrlPath(QString path)
+{
+    return QDir::cleanPath(path).replace(QLatin1Char('\\'), QLatin1Char('/'));
 }
 }
 
@@ -86,9 +95,48 @@ QString MainWindow::resolveAudioPath(const QString &audioPath, const QString &ap
     return firstCandidate;
 }
 
+QString MainWindow::resolveBackgroundImagePath(const QString &appDir)
+{
+    const QStringList names = {
+        QStringLiteral("background.png"),
+        QStringLiteral("background.jpg"),
+        QStringLiteral("background.jpeg"),
+        QStringLiteral("background.bmp")
+    };
+    const QStringList folders = {
+        QString(),
+        QStringLiteral("assets"),
+        QStringLiteral("data")
+    };
+
+    const QDir directory(appDir);
+    for (const QString &folder : folders) {
+        const QDir candidateDir(folder.isEmpty()
+            ? directory.absolutePath()
+            : directory.absoluteFilePath(folder));
+        for (const QString &name : names) {
+            const QString candidate = QDir::cleanPath(candidateDir.absoluteFilePath(name));
+            if (QFileInfo::exists(candidate)) {
+                return candidate;
+            }
+        }
+    }
+    return {};
+}
+
+bool MainWindow::shouldRetryAutoplay(
+    QMediaPlayer::PlaybackState,
+    qint64 position,
+    int attempts,
+    int maxAttempts)
+{
+    return position <= 0 && attempts < maxAttempts;
+}
+
 void MainWindow::buildUi()
 {
     auto *central = new QWidget(this);
+    central->setObjectName(QStringLiteral("mainSurface"));
     auto *mainLayout = new QVBoxLayout(central);
     mainLayout->setContentsMargins(16, 16, 16, 12);
     mainLayout->setSpacing(10);
@@ -202,17 +250,46 @@ void MainWindow::buildUi()
     audioOutput_ = new QAudioOutput(this);
     audioOutput_->setVolume(0.7f);
     player_->setAudioOutput(audioOutput_);
+    autoplayRetryTimer_ = new QTimer(this);
+    autoplayRetryTimer_->setInterval(kAutoplayRetryIntervalMs);
 
     setCentralWidget(central);
-    setStyleSheet(QStringLiteral(
-        "QMainWindow, QWidget { background: #f6f7fb; color: #202124; }"
-        "QLineEdit, QComboBox, QTableWidget { background: white; border: 1px solid #d9dce5;"
-        " border-radius: 5px; padding: 5px; }"
-        "QPushButton { background: #6558d3; color: white; border: none;"
-        " border-radius: 5px; padding: 7px 12px; }"
-        "QPushButton:hover { background: #5548c5; }"
-        "QHeaderView::section { background: #eceefa; padding: 7px; border: none; }"
-        "#playerBar { background: white; border: 1px solid #d9dce5; border-radius: 7px; }"));
+    const QString backgroundImage = resolveBackgroundImagePath(appDir_);
+    const QString mainBackground = backgroundImage.isEmpty()
+        ? QStringLiteral(
+            "#mainSurface {"
+            " background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+            " stop:0 #dfe9f3, stop:0.45 #ffffff, stop:1 #d7e1ec);"
+            "}")
+        : QStringLiteral(
+            "#mainSurface {"
+            " border-image: url(\"%1\") 0 0 0 0 stretch stretch;"
+            "}").arg(styleUrlPath(backgroundImage));
+    setStyleSheet(mainBackground + QStringLiteral(
+        "QWidget { color: #1f2433; font-family: \"Microsoft YaHei UI\", \"Segoe UI\"; font-size: 13px; }"
+        "QLineEdit, QComboBox { background: rgba(255, 255, 255, 190);"
+        " border: 1px solid rgba(255, 255, 255, 210); border-radius: 12px;"
+        " padding: 8px 10px; selection-background-color: #6b7cff; }"
+        "QLineEdit:focus, QComboBox:focus { border: 1px solid rgba(77, 103, 255, 210); }"
+        "QTableWidget#rankingTable { background: rgba(255, 255, 255, 205);"
+        " alternate-background-color: rgba(244, 247, 255, 165);"
+        " border: 1px solid rgba(255, 255, 255, 210); border-radius: 16px;"
+        " gridline-color: rgba(110, 125, 160, 50); padding: 8px; }"
+        "QTableWidget#rankingTable::item { padding: 7px; border-radius: 7px; }"
+        "QTableWidget#rankingTable::item:selected { background: rgba(76, 100, 255, 185); color: white; }"
+        "QHeaderView::section { background: rgba(244, 247, 255, 220); color: #26324d;"
+        " padding: 9px; border: none; border-bottom: 1px solid rgba(150, 160, 190, 75); font-weight: 600; }"
+        "QPushButton { background: rgba(58, 82, 210, 218); color: white; border: none;"
+        " border-radius: 12px; padding: 8px 14px; font-weight: 600; }"
+        "QPushButton:hover { background: rgba(40, 62, 185, 235); }"
+        "QPushButton:pressed { background: rgba(30, 46, 150, 245); }"
+        "#playerBar { background: rgba(255, 255, 255, 190);"
+        " border: 1px solid rgba(255, 255, 255, 220); border-radius: 18px; }"
+        "QSlider::groove:horizontal { height: 8px; background: rgba(88, 99, 130, 55); border-radius: 4px; }"
+        "QSlider::sub-page:horizontal { background: rgba(58, 82, 210, 210); border-radius: 4px; }"
+        "QSlider::handle:horizontal { background: white; border: 2px solid rgba(58, 82, 210, 220);"
+        " width: 16px; margin: -5px 0; border-radius: 8px; }"
+        "QStatusBar { background: rgba(255, 255, 255, 130); }"));
 
     connect(newPlaylistButton, &QPushButton::clicked, this, &MainWindow::createPlaylist);
     connect(refreshButton, &QPushButton::clicked, this, [this] { refresh(selectedSongId()); });
@@ -257,6 +334,9 @@ void MainWindow::connectUi()
         if (!seeking_) {
             positionSlider_->setValue(static_cast<int>(std::min<qint64>(position, INT_MAX)));
         }
+        if (pendingAutoplay_ && position > 0) {
+            stopAutoplayRetry();
+        }
         updatePlayerUi();
     });
     connect(positionSlider_, &QSlider::sliderPressed, this, [this] { seeking_ = true; });
@@ -272,23 +352,22 @@ void MainWindow::connectUi()
     });
     connect(player_, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
         if (status == QMediaPlayer::EndOfMedia) {
-            pendingAutoplay_ = false;
+            stopAutoplayRetry();
             playRelative(1);
         } else if (pendingAutoplay_
                    && (status == QMediaPlayer::LoadedMedia
                        || status == QMediaPlayer::BufferedMedia)) {
-            pendingAutoplay_ = false;
-            player_->setPosition(0);
-            player_->play();
+            retryAutoplay();
         } else if (status == QMediaPlayer::InvalidMedia) {
-            pendingAutoplay_ = false;
+            stopAutoplayRetry();
         }
     });
     connect(player_, &QMediaPlayer::errorOccurred, this,
             [this](QMediaPlayer::Error, const QString &message) {
-                pendingAutoplay_ = false;
+                stopAutoplayRetry();
                 statusBar()->showMessage(text(u8"播放错误：") + message, 8000);
             });
+    connect(autoplayRetryTimer_, &QTimer::timeout, this, &MainWindow::retryAutoplay);
 }
 
 void MainWindow::loadPlaylists(qint64 selectedId)
@@ -443,7 +522,7 @@ void MainWindow::deleteSong()
     }
     if (currentSongId_ == id) {
         player_->stop();
-        pendingAutoplay_ = false;
+        stopAutoplayRetry();
         currentSongId_ = 0;
         currentQueueRow_ = -1;
         currentSongLabel_->setText(text(u8"当前未播放"));
@@ -532,6 +611,7 @@ void MainWindow::playRow(int row)
     }
     const Song song = songs_.at(row);
     if (song.id == currentSongId_) {
+        startAutoplayRetry();
         player_->play();
         return;
     }
@@ -544,10 +624,10 @@ void MainWindow::playRow(int row)
     currentSongId_ = song.id;
     currentQueueRow_ = row;
     currentSongLabel_->setText(song.title + QStringLiteral(" - ") + song.performerText());
-    pendingAutoplay_ = true;
     player_->stop();
     player_->setSource(QUrl::fromLocalFile(path));
     player_->setPosition(0);
+    startAutoplayRetry();
     if (!database_.incrementPlay(song.id)) {
         showDatabaseError(text(u8"播放计数更新失败"));
     }
@@ -579,6 +659,45 @@ void MainWindow::playRelative(int offset)
 QString MainWindow::audioFilePath(const Song &song) const
 {
     return resolveAudioPath(song.audioPath, appDir_);
+}
+
+void MainWindow::startAutoplayRetry()
+{
+    pendingAutoplay_ = true;
+    autoplayRetryCount_ = 0;
+    if (autoplayRetryTimer_ != nullptr) {
+        autoplayRetryTimer_->start();
+    }
+}
+
+void MainWindow::stopAutoplayRetry()
+{
+    pendingAutoplay_ = false;
+    autoplayRetryCount_ = 0;
+    if (autoplayRetryTimer_ != nullptr) {
+        autoplayRetryTimer_->stop();
+    }
+}
+
+void MainWindow::retryAutoplay()
+{
+    if (!pendingAutoplay_) {
+        return;
+    }
+    if (!shouldRetryAutoplay(
+            player_->playbackState(),
+            player_->position(),
+            autoplayRetryCount_,
+            kMaxAutoplayRetries)) {
+        stopAutoplayRetry();
+        return;
+    }
+
+    ++autoplayRetryCount_;
+    const qint64 duration = player_->duration();
+    const qint64 nudgePosition = duration > 1000 ? 100 : 0;
+    player_->setPosition(nudgePosition);
+    player_->play();
 }
 
 void MainWindow::updatePlayerUi()

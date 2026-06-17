@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLineEdit>
+#include <QMediaPlayer>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTemporaryDir>
@@ -18,6 +19,8 @@ private slots:
     void createsRequiredControls();
     void formatsDuration();
     void resolvesAudioPathFromAncestorMediaDirectory();
+    void retriesAutoplayWhilePlaybackHasNotAdvanced();
+    void resolvesBackgroundImageFromAppDirectory();
 };
 
 void TestMainWindow::createsRequiredControls()
@@ -59,6 +62,34 @@ void TestMainWindow::resolvesAudioPathFromAncestorMediaDirectory()
     QCOMPARE(
         MainWindow::resolveAudioPath(QStringLiteral("media/song.mp3"), appDir),
         QDir::cleanPath(rootDir.filePath(QStringLiteral("media/song.mp3"))));
+}
+
+void TestMainWindow::retriesAutoplayWhilePlaybackHasNotAdvanced()
+{
+    QVERIFY(MainWindow::shouldRetryAutoplay(
+        QMediaPlayer::PlayingState, 0, 0, 6));
+    QVERIFY(MainWindow::shouldRetryAutoplay(
+        QMediaPlayer::StoppedState, 0, 5, 6));
+    QVERIFY(!MainWindow::shouldRetryAutoplay(
+        QMediaPlayer::PlayingState, 1500, 0, 6));
+    QVERIFY(!MainWindow::shouldRetryAutoplay(
+        QMediaPlayer::StoppedState, 0, 6, 6));
+}
+
+void TestMainWindow::resolvesBackgroundImageFromAppDirectory()
+{
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+
+    QDir rootDir(root.path());
+    QFile imageFile(rootDir.filePath(QStringLiteral("background.png")));
+    QVERIFY(imageFile.open(QIODevice::WriteOnly));
+    imageFile.write("fake");
+    imageFile.close();
+
+    QCOMPARE(
+        MainWindow::resolveBackgroundImagePath(root.path()),
+        QDir::cleanPath(rootDir.filePath(QStringLiteral("background.png"))));
 }
 
 QTEST_MAIN(TestMainWindow)

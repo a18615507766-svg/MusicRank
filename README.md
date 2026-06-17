@@ -17,6 +17,10 @@
 
 歌曲文件放在 `media/` 目录中。出于文件大小和版权考虑，GitHub 仓库不包含 MP3 文件。删除歌曲记录不会删除 MP3 文件。
 
+## 背景图片
+
+如需自定义半透明背景，把图片放到程序同目录，并命名为 `background.jpg`、`background.png`、`background.jpeg` 或 `background.bmp`。没有背景图片时，程序会使用默认渐变背景。
+
 ## 源码构建
 
 在项目根目录运行：
